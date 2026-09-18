@@ -1,42 +1,87 @@
 import json
-import requests
 import os
-from config import JSON_DIRECTORY_NAME, JSON_FILE_NAME
 
-url = "https://api.wheretheiss.at/v1/satellites/25544"
+import requests
+from opencage.geocoder import OpenCageGeocode
 
-def get_current_position():
-    response = requests.get(url)
-    data = response.json()
+from config import (
+    JSON_DIRECTORY_NAME,
+    JSON_FILE_NAME,
+    OPENCAGE_API_KEY,
+    ISS_API
+)
 
-    return data
+
+class ISSAPIClient:
+
+    def fetch_iss_data(self):
+        response = requests.get(ISS_API)
+        response.raise_for_status()
+
+        return response.json()
+
+    def iss_location(self, lat, lon):
+        response = OpenCageGeocode(OPENCAGE_API_KEY)
+        data = response.reverse_geocode(lat, lon)
+
+        components = data[0]["components"]
+
+        location = {
+            "country": components.get("country"),
+            "city": components.get("city"),
+            "body_of_water": components.get("body_of_water"),
+        }
+
+        return location
 
 
+class ISSCollector:
 
-class JSONStorage:
-    JSON_FILE_LOCATION = JSON_DIRECTORY_NAME + "/" + JSON_FILE_NAME
+    JSON_FILE_LOCATION = os.path.join(
+        JSON_DIRECTORY_NAME,
+        JSON_FILE_NAME
+    )
 
-    def __init__(self, IIS_Position):
-        self.IIS_Position = IIS_Position
+    def __init__(self, api_client):
+        self.api_client = api_client
 
-    def _read(self):
+        self._create_data_directory()
+        self._create_json_file()
+
+    def _create_data_directory(self):
+        os.makedirs(JSON_DIRECTORY_NAME, exist_ok=True)
+
+    def _create_json_file(self):
         if not os.path.exists(self.JSON_FILE_LOCATION):
-            os.mkdir(JSON_DIRECTORY_NAME)
-            return []
+            with open(self.JSON_FILE_LOCATION, "w") as file:
+                json.dump([], file)
 
+    def _read_lake(self):
         with open(self.JSON_FILE_LOCATION, "r") as file:
-            data = json.load(file)
+            return json.load(file)
 
-        return data
-
-
-    def write(self):
-        result = self._read()
-        result.append(self.IIS_Position)
+    def _save_to_lake(self, new_data):
+        data_lake = self._read_lake()
+        data_lake.append(new_data) 
         with open(self.JSON_FILE_LOCATION, "w") as file:
-            json.dump(result, file, indent=4)
+            json.dump(data_lake, file, indent=4)
+
+    def collect_data(self):
+        iss_data = self.api_client.fetch_iss_data()
+
+        location = self.api_client.iss_location(
+            iss_data["latitude"],
+            iss_data["longitude"]
+        )
+        self._save_to_lake(iss_data)
+
+        return {
+            "iss_data": iss_data,
+            "location": location
+        }
+
 
 if __name__ == "__main__":
-    position = get_current_position()
-    write_data = JSONStorage(position)
-    write_data.write()
+    api_client = ISSAPIClient()
+    collector = ISSCollector(api_client)
+    print(collector.collect_data())
