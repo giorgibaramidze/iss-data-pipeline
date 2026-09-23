@@ -1,27 +1,27 @@
-import json
-import os
-
+from time import perf_counter
 import requests
 from opencage.geocoder import OpenCageGeocode
+from storage import JSONStorage
 
 from config import (
     JSON_DIRECTORY_NAME,
-    JSON_FILE_NAME,
     OPENCAGE_API_KEY,
-    ISS_API
+    ISS_API,
+    JSON_FILE_LOCATION
 )
 
 
 class ISSAPIClient:
+    def __init__(self, iss_api_key, opencage_api_key):
+        self.iss_api_key = iss_api_key
+        self.opencage_api_key = opencage_api_key
 
     def fetch_iss_data(self):
-        response = requests.get(ISS_API)
-        response.raise_for_status()
-
+        response = requests.get(self.iss_api_key)
         return response.json()
 
     def iss_location(self, lat, lon):
-        response = OpenCageGeocode(OPENCAGE_API_KEY)
+        response = OpenCageGeocode(self.opencage_api_key)
         data = response.reverse_geocode(lat, lon)
 
         components = data[0]["components"]
@@ -35,36 +35,13 @@ class ISSAPIClient:
         return location
 
 
+            
 class ISSCollector:
 
-    JSON_FILE_LOCATION = os.path.join(
-        JSON_DIRECTORY_NAME,
-        JSON_FILE_NAME
-    )
-
-    def __init__(self, api_client):
+    def __init__(self, api_client, storage):
         self.api_client = api_client
+        self.storage = storage
 
-        self._create_data_directory()
-        self._create_json_file()
-
-    def _create_data_directory(self):
-        os.makedirs(JSON_DIRECTORY_NAME, exist_ok=True)
-
-    def _create_json_file(self):
-        if not os.path.exists(self.JSON_FILE_LOCATION):
-            with open(self.JSON_FILE_LOCATION, "w") as file:
-                json.dump([], file)
-
-    def _read_lake(self):
-        with open(self.JSON_FILE_LOCATION, "r") as file:
-            return json.load(file)
-
-    def _save_to_lake(self, new_data):
-        data_lake = self._read_lake()
-        data_lake.append(new_data) 
-        with open(self.JSON_FILE_LOCATION, "w") as file:
-            json.dump(data_lake, file, indent=4)
 
     def collect_data(self):
         iss_data = self.api_client.fetch_iss_data()
@@ -73,15 +50,15 @@ class ISSCollector:
             iss_data["latitude"],
             iss_data["longitude"]
         )
-        self._save_to_lake(iss_data)
+        self.storage.save_to_lake(iss_data)
 
         return {
             "iss_data": iss_data,
             "location": location
         }
 
-
 if __name__ == "__main__":
-    api_client = ISSAPIClient()
-    collector = ISSCollector(api_client)
-    print(collector.collect_data())
+    storage = JSONStorage(JSON_DIRECTORY_NAME, JSON_FILE_LOCATION)
+    api_client = ISSAPIClient(ISS_API, OPENCAGE_API_KEY)
+    collector = ISSCollector(api_client, storage)
+    collector.collect_data()
