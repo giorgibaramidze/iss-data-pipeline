@@ -23,7 +23,7 @@ Follow these steps to set up the development environment:
    - git clone https://github.com/giorgibaramidze/iss-data-pipeline.git
    - cd iss-tracker
    - python3 -m venv .venv // create virtual envoirment
-   - source .vrnv/bin/activate
+   - source .venv/bin/activate
    - pip install -r requirements.txt //install dependencies also
    - python main.py
 
