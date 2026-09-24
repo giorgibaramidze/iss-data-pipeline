@@ -9,7 +9,9 @@ from queries import (
     SELECT_LAST_TIMESTAMP,
     SELECT_VISIBILITY_COUNT
 )
+from logger import logger
 import psycopg
+from config import DB_NAME
 
 
 def connection(autocommit=False):
@@ -20,7 +22,8 @@ def connection(autocommit=False):
                     with conn.cursor() as cur:
                         return fn(self, cur, *args, **kwargs)
             except Exception as e:
-                raise e
+                logger.error(f"Database error in {fn.__name__}: {e}")
+                raise
         return wrapper
     return decorator
 
@@ -29,19 +32,20 @@ class Database:
     def __init__(self, config):
         self.config = config
 
-    #create tables and databases
+    #create tables and database
     @connection(autocommit=True)
     def create_database(self, cur):
         try:
             cur.execute(CREATE_DATABASE)
-        except psycopg.errors.DuplicateDatabase as e:
-            print(e)
+            logger.info(f"Database {DB_NAME} created successfully.")
+        except psycopg.errors.DuplicateDatabase:
+            logger.info(f"Database {DB_NAME} already exists.")
 
     @connection()
     def create_tables(self, cur):
         cur.execute(CREATE_TABLE_ISS_DATA)
         cur.execute(CREATE_TABLE_ISS_ENRICHED)
-
+        logger.info("Tables 'iss_data' and 'iss_enriched' created.")
 
     #perform insert data
     @connection()
