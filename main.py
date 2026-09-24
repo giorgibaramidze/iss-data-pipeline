@@ -1,64 +1,33 @@
-from time import perf_counter
-import requests
-from opencage.geocoder import OpenCageGeocode
+from database import Database
 from storage import JSONStorage
+from services import ISSCollector
+from clients import ISSAPIClient, GeocoderClient
 
 from config import (
     JSON_DIRECTORY_NAME,
     OPENCAGE_API_KEY,
     ISS_API,
-    JSON_FILE_LOCATION
+    JSON_FILE_LOCATION,
+    db_connection
 )
 
 
-class ISSAPIClient:
-    def __init__(self, iss_api_key, opencage_api_key):
-        self.iss_api_key = iss_api_key
-        self.opencage_api_key = opencage_api_key
-
-    def fetch_iss_data(self):
-        response = requests.get(self.iss_api_key)
-        return response.json()
-
-    def iss_location(self, lat, lon):
-        response = OpenCageGeocode(self.opencage_api_key)
-        data = response.reverse_geocode(lat, lon)
-
-        components = data[0]["components"]
-
-        location = {
-            "country": components.get("country"),
-            "city": components.get("city"),
-            "body_of_water": components.get("body_of_water"),
-        }
-
-        return location
-
-
-            
-class ISSCollector:
-
-    def __init__(self, api_client, storage):
-        self.api_client = api_client
-        self.storage = storage
-
-
-    def collect_data(self):
-        iss_data = self.api_client.fetch_iss_data()
-
-        location = self.api_client.iss_location(
-            iss_data["latitude"],
-            iss_data["longitude"]
-        )
-        self.storage.save_to_lake(iss_data)
-
-        return {
-            "iss_data": iss_data,
-            "location": location
-        }
-
+db_action = Database(db_connection)
+storage = JSONStorage(JSON_DIRECTORY_NAME, JSON_FILE_LOCATION)
+print("step 1")
+db_action.create_database()
+print("step 2")
+db_action.create_tables()
+print("step 3")
 if __name__ == "__main__":
-    storage = JSONStorage(JSON_DIRECTORY_NAME, JSON_FILE_LOCATION)
-    api_client = ISSAPIClient(ISS_API, OPENCAGE_API_KEY)
-    collector = ISSCollector(api_client, storage)
-    collector.collect_data()
+    print("step 4")
+    iss_client = ISSAPIClient(ISS_API)
+    geocoder_client = GeocoderClient(OPENCAGE_API_KEY)
+    collector = ISSCollector(iss_client, geocoder_client, storage)
+    iss_data, location = collector.collect_data()
+    result = db_action.fetch_traveled_distance(current_rec=iss_data)
+    iss_id = db_action.insert_into_iss_data(current_rec=iss_data)
+    db_action.insert_into_iss_enriched(iss_id=iss_id, location=location, distance_km=result)
+    
+    print(db_action.select_highest_velocity())
+    print(db_action.count_visibility())
