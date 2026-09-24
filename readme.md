@@ -19,8 +19,7 @@ Before running this application, make sure you have the following installed:
 
 Follow these steps to set up the development environment:
 
-1. **Clone the repository:**
-   - run following commands
+ **Clone the repository and run following commands:**
    - git clone https://github.com/giorgibaramidze/iss-data-pipeline.git
    - cd iss-tracker
    - python3 -m venv .venv // create virtual envoirment
