@@ -5,10 +5,8 @@ from psycopg.rows import dict_row
 
 from config import DB_NAME
 from logger import logger
-from queries import (
+from db.queries import (
     CREATE_DATABASE,
-    CREATE_TABLE_ISS_DATA,
-    CREATE_TABLE_ISS_ENRICHED,
     INSERT_INTO_ISS_DATA,
     INSERT_ISS_ENRICHED,
     SELECT_HIGHEST_VELOCITY,
@@ -27,17 +25,23 @@ def connection(autocommit=False):
         @wraps(fn)
         def wrapper(self, *args, **kwargs):
             try:
+                connection_config = self.config
+
+                if fn.__name__ == "create_database":
+                    connection_config = {
+                        **self.config,
+                        "dbname": "postgres",
+                    }
                 with psycopg.connect(
-                    **self.config,
+                    **connection_config,
                     row_factory=dict_row,
                     autocommit=autocommit,
                 ) as conn:
                     with conn.cursor() as cur:
                         return fn(self, cur, *args, **kwargs)
-            except Exception as e:
-                logger.exception(
-                    f"Database error in {fn.__name__}: {e}"
-                )
+
+            except Exception:
+                logger.exception(f"Database error in {fn.__name__}")
                 raise
 
         return wrapper
@@ -60,12 +64,6 @@ class Database:
         except psycopg.errors.DuplicateDatabase:
             logger.info(f"Database {DB_NAME} already exists.")
 
-    @connection()
-    def create_tables(self, cur):
-        """Create the ISS data and enriched data tables."""
-        cur.execute(CREATE_TABLE_ISS_DATA)
-        cur.execute(CREATE_TABLE_ISS_ENRICHED)
-        logger.info("Tables 'iss_data' and 'iss_enriched' created.")
 
     @connection()
     def insert_into_iss_data(self, cur, current_rec):

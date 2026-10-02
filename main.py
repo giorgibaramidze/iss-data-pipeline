@@ -1,5 +1,8 @@
 import time
 
+from alembic import command
+from alembic.config import Config
+
 from clients import GeocoderClient, ISSAPIClient
 from config import (
     db_connection,
@@ -9,7 +12,7 @@ from config import (
     OPENCAGE_API_KEY,
     POLLING_INTERVAL,
 )
-from database import Database
+from db.database import Database
 from logger import logger
 from services import ISSCollector
 from storage import JSONStorage
@@ -23,7 +26,9 @@ def main():
     try:
         db_action = Database(db_connection)
         db_action.create_database()
-        db_action.create_tables()
+
+        alembic_cfg = Config("alembic.ini")
+        command.upgrade(alembic_cfg, "head")
 
         storage = JSONStorage(JSON_DIRECTORY_NAME, JSON_FILE_LOCATION)
         storage.initialize()
