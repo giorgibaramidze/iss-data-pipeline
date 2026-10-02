@@ -1,64 +1,65 @@
-from time import perf_counter
-import requests
-from opencage.geocoder import OpenCageGeocode
+import time
+from database import Database
 from storage import JSONStorage
-
+from services import ISSCollector
+from clients import ISSAPIClient, GeocoderClient
+from logger import logger
 from config import (
     JSON_DIRECTORY_NAME,
     OPENCAGE_API_KEY,
     ISS_API,
-    JSON_FILE_LOCATION
+    JSON_FILE_LOCATION,
+    db_connection
 )
 
 
-class ISSAPIClient:
-    def __init__(self, iss_api_key, opencage_api_key):
-        self.iss_api_key = iss_api_key
-        self.opencage_api_key = opencage_api_key
+def main():
+    logger.info("Starting ISS tracking pipeline execution...")
+    
+    try:
+        db_action = Database(db_connection)
+        db_action.create_database()
+        db_action.create_tables()
 
-    def fetch_iss_data(self):
-        response = requests.get(self.iss_api_key)
-        return response.json()
+        storage = JSONStorage(JSON_DIRECTORY_NAME, JSON_FILE_LOCATION)
+        storage.initialize()
+        iss_client = ISSAPIClient(ISS_API)
+        geocoder_client = GeocoderClient(OPENCAGE_API_KEY)
+        collector = ISSCollector(iss_client, geocoder_client, storage)
+    except Exception as e:
+        logger.error(f"Pipeline initialization failed: {e}")
+        return
 
-    def iss_location(self, lat, lon):
-        response = OpenCageGeocode(self.opencage_api_key)
-        data = response.reverse_geocode(lat, lon)
+    while True:
+        try:
+            iss_data, location = collector.collect_data()
 
-        components = data[0]["components"]
+            distance_km = db_action.fetch_traveled_distance(current_rec=iss_data)
+            iss_id = db_action.insert_into_iss_data(current_rec=iss_data)
+            db_action.insert_into_iss_enriched(
+                iss_id=iss_id, location=location, distance_km=distance_km
+            )
 
-        location = {
-            "country": components.get("country"),
-            "city": components.get("city"),
-            "body_of_water": components.get("body_of_water"),
-        }
+            place_name = (
+                location.get("city") 
+                or location.get("country") 
+                or location.get("body_of_water") 
+                or "Unknown Location"
+            )
+            velocity = iss_data.get("velocity")
 
-        return location
+            logger.info(
+                f"SUMMARY: ISS Record #{iss_id} | "
+                f"Location: {place_name} | "
+                f"Distance since last reading: {distance_km:.2f} km | "
+                f"Velocity: {velocity:.2f} km/h"
+            )
 
+        except Exception as e:
+            logger.error(f"Pipeline execution step failed: {e}")
 
-            
-class ISSCollector:
+        time.sleep(50)
 
-    def __init__(self, api_client, storage):
-        self.api_client = api_client
-        self.storage = storage
-
-
-    def collect_data(self):
-        iss_data = self.api_client.fetch_iss_data()
-
-        location = self.api_client.iss_location(
-            iss_data["latitude"],
-            iss_data["longitude"]
-        )
-        self.storage.save_to_lake(iss_data)
-
-        return {
-            "iss_data": iss_data,
-            "location": location
-        }
 
 if __name__ == "__main__":
-    storage = JSONStorage(JSON_DIRECTORY_NAME, JSON_FILE_LOCATION)
-    api_client = ISSAPIClient(ISS_API, OPENCAGE_API_KEY)
-    collector = ISSCollector(api_client, storage)
-    collector.collect_data()
+    main()

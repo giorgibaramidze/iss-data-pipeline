@@ -6,6 +6,7 @@ class JSONStorage:
         self.json_directory_location = json_directory_location
         self.json_file_location = json_file_location
     
+    def initialize(self):
         self._create_data_directory()
         self._create_json_file()
     
