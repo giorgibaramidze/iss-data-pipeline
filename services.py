@@ -19,7 +19,7 @@ class ISSCollector:
         logger.info("Fetching geocoding coordinates...")
         location = self._geocoder_client.get_iss_location(lat, lon)
 
-        self._storage.save_to_lake(iss_data)
-        logger.info("data saved to JSON lake.")
+        self._storage.save_to_json(iss_data)
+        logger.info("data saved to JSON file.")
 
         return iss_data, location

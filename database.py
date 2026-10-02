@@ -12,12 +12,15 @@ from queries import (
 from logger import logger
 import psycopg
 from config import DB_NAME
+from functools import wraps
 
 
 def connection(autocommit=False):
     def decorator(fn):
+        @wraps(fn)
         def wrapper(self, *args, **kwargs):
             try:
+                # Assuming self.config contains your connection details
                 with psycopg.connect(**self.config, row_factory=dict_row, autocommit=autocommit) as conn:
                     with conn.cursor() as cur:
                         return fn(self, cur, *args, **kwargs)
